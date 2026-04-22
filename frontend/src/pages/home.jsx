@@ -16,18 +16,23 @@ export default function Home() {
         skipEmptyLines: true,
       });
 
-      const cleanData = result.data.map((b) => ({
-      nomor: (b.nomor || b.Nomor || b["nomor "] || "").trim(),
-      kelas: (b.kelas || b.Kelas || "").trim(),
-      ruangan: (b.ruangan || "").trim(),
-      status: (b.status || "").toLowerCase().trim(),
-
-      lantai: (b.lantai || "").trim(),
-      bangsal: (b.bangsal || b["bangsal "] || "").trim(),
-      jenis: (b.jenis || "")
-        .toLowerCase()
-        .trim(),
-    }));
+      const cleanData = result.data
+  .map((b) => ({
+    nomor: (b.nomor || b.Nomor || b["nomor "] || "").trim(),
+    kelas: (b.kelas || b.Kelas || "").trim(),
+    ruangan: (b.ruangan || "").trim(),
+    status: (b.status || "").toLowerCase().trim(),
+    lantai: (b.lantai || "").trim(),
+    bangsal: (b.bangsal || b["bangsal "] || "").trim(),
+    jenis: (b.jenis || "").toLowerCase().trim(),
+  }))
+  .filter(
+    (b) =>
+      b.nomor !== "" &&
+      b.status !== "" &&
+      b.lantai !== "" &&
+      b.bangsal !== ""
+  );
 
       setBeds(cleanData);
     };
