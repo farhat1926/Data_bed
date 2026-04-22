@@ -16,22 +16,18 @@ export default function Home() {
         skipEmptyLines: true,
       });
 
-      const cleanData = result.data
-  .map((b) => ({
-    nomor: (b.nomor || b.Nomor || b["nomor "] || "").trim(),
-    kelas: (b.kelas || b.Kelas || "").trim(),
-    ruangan: (b.ruangan || "").trim(),
-    status: (b.status || "").toLowerCase().trim(),
-    lantai: (b.lantai || "").trim(),
-    bangsal: (b.bangsal || b["bangsal "] || "").trim(),
-    jenis: (b.jenis || "").toLowerCase().trim(),
-  }))
-  .filter(
-    (b) =>
-      b.nomor !== "" &&
-      b.lantai !== "" &&
-      b.bangsal !== ""
-  );
+      const cleanData = result.data.map((b) => ({
+      nomor: (b.nomor || b.Nomor || b["nomor "] || "").trim(),
+      kelas: (b.kelas || b.Kelas || "").trim(),
+      ruangan: (b.ruangan || "").trim(),
+      status: (b.status || "").toLowerCase().trim(),
+
+      lantai: (b.lantai || "").trim(),
+      bangsal: (b.bangsal || b["bangsal "] || "").trim(),
+      jenis: (b.jenis || "")
+        .toLowerCase()
+        .trim(),
+    }));
 
       setBeds(cleanData);
     };
@@ -91,9 +87,6 @@ export default function Home() {
 
           {Object.keys(grouped[lantai]).map((bangsal) => (
             <div key={bangsal} className="mb-6">
-              <h3 className="text-lg font-semibold mb-2">
-                Bangsal {bangsal}
-              </h3>
 
               {Object.keys(grouped[lantai][bangsal]).map((jenis) => (
                 <div key={jenis} className="mb-4">
