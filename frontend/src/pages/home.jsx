@@ -17,15 +17,17 @@ export default function Home() {
       });
 
       const cleanData = result.data.map((b) => ({
-  nomor: (b.nomor || b.Nomor || b["nomor "] || "").trim(),
-  kelas: (b.kelas || b.Kelas || "").trim(),
-  ruangan: (b.ruangan || "").trim(),
-  status: (b.status || "").toLowerCase().trim(),
+      nomor: (b.nomor || b.Nomor || b["nomor "] || "").trim(),
+      kelas: (b.kelas || b.Kelas || "").trim(),
+      ruangan: (b.ruangan || "").trim(),
+      status: (b.status || "").toLowerCase().trim(),
 
-  lantai: (b.lantai || "").trim(),
-  bangsal: (b.bangsal || b["bangsal "] || "").trim(),
-  jenis: (b.jenis || "").trim(),
-}));
+      lantai: (b.lantai || "").trim(),
+      bangsal: (b.bangsal || b["bangsal "] || "").trim(),
+      jenis: (b.jenis || "")
+        .toLowerCase()
+        .trim(),
+    }));
 
       setBeds(cleanData);
     };
@@ -96,21 +98,32 @@ export default function Home() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {grouped[lantai][bangsal][jenis].map((bed, i) => (
                       <div
-                        key={i}
-                        className={`p-3 rounded border ${
-                          bed.status === "kosong"
-                            ? "bg-green-100 border-green-400"
-                            : "bg-red-100 border-red-400"
-                        }`}
-                      >
-                        <p className="font-semibold">{bed.nomor}</p>
-                        <p className="text-sm text-gray-600">
-                          {bed.kelas}
-                        </p>
-                        <span className="text-xs">
-                          {bed.status}
-                        </span>
-                      </div>
+  key={i}
+  className={`p-3 rounded border ${
+    bed.status === "kosong"
+      ? "bg-green-100 border-green-400"
+      : "bg-red-100 border-red-400"
+  }`}
+>
+  <p className="font-semibold">{bed.nomor}</p>
+
+  <p className="text-sm text-gray-600">{bed.kelas}</p>
+
+  {/* 🔥 JENIS PASIEN */}
+  <p
+    className={`text-xs font-semibold ${
+      bed.jenis === "laki-laki"
+        ? "text-blue-600"
+        : bed.jenis === "perempuan"
+        ? "text-pink-600"
+        : "text-yellow-600"
+    }`}
+  >
+    {bed.jenis}
+  </p>
+
+  <span className="text-xs">{bed.status}</span>
+</div>
                     ))}
                   </div>
                 </div>
