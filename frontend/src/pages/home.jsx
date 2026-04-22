@@ -98,13 +98,13 @@ export default function Home() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {grouped[lantai][bangsal][jenis].map((bed, i) => (
                       <div
-  key={i}
-  className={`p-3 rounded border ${
-    bed.status === "kosong"
-      ? "bg-green-100 border-green-400"
-      : "bg-red-100 border-red-400"
-  }`}
->
+                      key={i}
+                      className={`p-3 rounded border ${
+                        bed.status === "kosong"
+                          ? "bg-green-100 border-green-400"
+                          : "bg-red-100 border-red-400"
+                      }`}
+                    >
   <p className="font-semibold">{bed.nomor}</p>
 
   <p className="text-sm text-gray-600">{bed.kelas}</p>
