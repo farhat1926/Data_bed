@@ -67,9 +67,6 @@ export default function Home() {
     <h1 className="text-3xl font-bold text-gray-800">
       🏥 Monitoring Bed Rumah Sakit
     </h1>
-    <p className="text-gray-500 text-sm">
-      Update realtime setiap 5 detik
-    </p>
   </div>
 
   {/* STATISTIK */}
