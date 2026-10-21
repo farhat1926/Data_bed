@@ -1,366 +1,252 @@
-
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
 
+// Sumber data tetap memakai Google Spreadsheet dari aplikasi sebelumnya.
 const SPREADSHEET_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmz55GXbaiZ040aPDaLDLpApzFYtjYQ2431Qk9_bRD0bAl50f1zrVrBglOHr6VRj4Vo2SLvnIKBA2B/pub?output=csv";
+const REFRESH_MS = 30000;
+const SLIDE_MS = 9000;
+const ROOMS_PER_PAGE = 6;
+
+function normalizeRow(row) {
+  const raw = String(row.jumlah_bed ?? "").trim();
+  const num = raw === "" ? null : Number(raw);
+  const status = String(row.status ?? "").trim().toLowerCase();
+  return {
+    nomor: String(row.nomor ?? "").trim(),
+    lantai: String(row.lantai ?? "").trim(),
+    bangsal: String(row.bangsal ?? "").trim(),
+    kelas: String(row.kelas ?? "").trim(),
+    ruangan: String(row.ruangan ?? "").trim(),
+    jenis: String(row.jenis ?? "").trim().toLowerCase(),
+    status: status === "kosong" || status === "terisi" ? status : "unknown",
+    capacity: Number.isInteger(num) && num >= 0 ? num : null,
+  };
+}
+
+function buildRooms(rows) {
+  const map = new Map();
+  rows.forEach((r) => {
+    if (!r.nomor || !r.lantai || !r.bangsal) return;
+    const key = JSON.stringify([r.lantai, r.bangsal, r.nomor]);
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        nomor: r.nomor,
+        lantai: r.lantai,
+        bangsal: r.bangsal,
+        kelas: r.kelas,
+        capacity: null,
+        rows: [],
+      });
+    }
+    const room = map.get(key);
+    if (r.capacity !== null) room.capacity = r.capacity;
+    if (!room.kelas && r.kelas) room.kelas = r.kelas;
+    room.rows.push(r);
+  });
+  return Array.from(map.values()).map((room) => {
+    const capacity = room.capacity ?? 0;
+    const beds = Array.from({ length: capacity }, (_, i) => ({
+      number: i + 1,
+      status: room.rows[i]?.status ?? "unknown",
+    }));
+    return {
+      ...room,
+      beds,
+      available: beds.filter((b) => b.status === "kosong").length,
+      occupied: beds.filter((b) => b.status === "terisi").length,
+      unknown: beds.filter((b) => b.status === "unknown").length,
+      needsReview: room.capacity === null || room.rows.length > capacity,
+    };
+  });
+}
+
+function Metric({ label, value, accent, unit }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-sm flex items-center justify-between gap-4">
+      <div>
+        <p className="text-[clamp(13px,1.15vw,22px)] font-semibold text-slate-600">{label}</p>
+        <p className="text-[clamp(12px,0.85vw,16px)] text-slate-400">{unit}</p>
+      </div>
+      <span className={`text-[clamp(36px,4vw,76px)] leading-none font-black tabular-nums ${accent}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function RoomCard({ room }) {
+  const isAvailable = room.available > 0;
+  return (
+    <article className={`h-full min-h-0 overflow-hidden rounded-2xl border-2 bg-white shadow-sm flex flex-col ${
+      isAvailable ? "border-emerald-300" : room.unknown ? "border-amber-300" : "border-slate-200"
+    }`}>
+      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
+        <div className="min-w-0">
+          <p className="text-[clamp(10px,0.9vw,16px)] font-semibold text-slate-500 truncate">
+            {room.lantai} • Bangsal {room.bangsal}
+          </p>
+          <h3 className="text-[clamp(18px,1.75vw,34px)] font-extrabold tracking-tight text-slate-900 truncate">
+            Kamar {room.nomor}
+          </h3>
+        </div>
+        <span className={`shrink-0 rounded-xl px-3 py-2 text-center font-extrabold text-[clamp(11px,1.05vw,18px)] ${
+          isAvailable ? "bg-emerald-100 text-emerald-800" : room.unknown ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800"
+        }`}>
+          {isAvailable ? `${room.available} TERSEDIA` : room.unknown ? "CEK STATUS" : "PENUH"}
+        </span>
+      </div>
+      <div className="flex-1 min-h-0 flex flex-col justify-center px-4 py-3 gap-3">
+        <div className="flex items-center justify-between gap-2 text-[clamp(12px,1vw,18px)]">
+          <span className="text-slate-600 truncate">{room.kelas || "Kelas belum dicatat"}</span>
+          <span className="shrink-0 font-semibold text-slate-800">Kapasitas {room.capacity ?? "—"} bed</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {room.beds.length ? room.beds.map((bed) => (
+            <div key={bed.number} className={`rounded-xl border px-2 py-2 flex flex-col items-center justify-center gap-1 ${
+              bed.status === "kosong" ? "bg-emerald-50 border-emerald-300" : bed.status === "terisi" ? "bg-rose-50 border-rose-300" : "bg-amber-50 border-amber-300"
+            }`}>
+              <span className="text-[clamp(11px,1vw,18px)] font-bold text-slate-800">Bed {bed.number}</span>
+              <span className={`text-[clamp(10px,0.9vw,16px)] font-extrabold ${
+                bed.status === "kosong" ? "text-emerald-700" : bed.status === "terisi" ? "text-rose-700" : "text-amber-700"
+              }`}>
+                {bed.status === "kosong" ? "● Kosong" : bed.status === "terisi" ? "● Terisi" : "● Belum ada data"}
+              </span>
+            </div>
+          )) : <span className="col-span-3 text-amber-800 font-semibold text-sm">Kapasitas kamar belum tersedia.</span>}
+        </div>
+      </div>
+    </article>
+  );
+}
 
 export default function Home() {
-  const [beds, setBeds] = useState([]);
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [lastCheck, setLastCheck] = useState(null);
+  const [page, setPage] = useState(0);
+  const [clock, setClock] = useState(new Date());
 
-  // AMBIL DATA DARI GOOGLE SPREADSHEET
   useEffect(() => {
-    let mounted = true;
+    const timer = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     let controller = null;
-
-    const fetchData = async () => {
-      if (controller) controller.abort();
-
-      const currentController = new AbortController();
-      controller = currentController;
-
+    const load = async () => {
+      controller?.abort();
+      const current = new AbortController();
+      controller = current;
       try {
-        const url = `${SPREADSHEET_URL}&t=${Date.now()}`;
-
-        const res = await fetch(url, {
-          signal: currentController.signal,
+        const response = await fetch(`${SPREADSHEET_URL}&t=${Date.now()}`, {
+          signal: current.signal,
           cache: "no-store",
         });
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-
-        const text = await res.text();
-
-        const result = Papa.parse(text, {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const csv = await response.text();
+        const parsed = Papa.parse(csv, {
           header: true,
           skipEmptyLines: true,
-          transformHeader: (header) =>
-            header.replace(/^\uFEFF/, "").trim().toLowerCase(),
+          transformHeader: (h) => h.replace(/^\uFEFF/, "").trim().toLowerCase(),
         });
-
-        if (result.errors.length > 0) {
-          console.warn("Peringatan CSV:", result.errors);
-        }
-
-        const cleanData = result.data
-          .map((b) => {
-            const jumlahRaw = String(
-              b.jumlah_bed ?? ""
-            ).trim();
-
-            return {
-              nomor: String(b.nomor ?? "").trim(),
-              kelas: String(b.kelas ?? "").trim(),
-              ruangan: String(b.ruangan ?? "").trim(),
-
-              status: String(b.status ?? "")
-                .toLowerCase()
-                .trim(),
-
-              lantai: String(b.lantai ?? "").trim(),
-              bangsal: String(b.bangsal ?? "").trim(),
-
-              jenis: String(b.jenis ?? "")
-                .toLowerCase()
-                .trim(),
-
-              // Boleh kosong pada baris kedua dan ketiga
-              jumlah_bed:
-                jumlahRaw === ""
-                  ? null
-                  : Number(jumlahRaw),
-            };
-          })
-          .filter(
-            (b) =>
-              b.nomor !== "" &&
-              ["kosong", "terisi"].includes(b.status) &&
-              b.lantai !== "" &&
-              b.bangsal !== "" &&
-              (b.jumlah_bed === null ||
-                (Number.isInteger(b.jumlah_bed) &&
-                  b.jumlah_bed >= 0))
-          );
-
-        if (mounted) {
-          setBeds(cleanData);
+        if (!Array.isArray(parsed.data)) throw new Error("Format CSV tidak sesuai");
+        const data = parsed.data.map(normalizeRow).filter((r) => r.nomor && r.lantai && r.bangsal);
+        if (active && controller === current) {
+          setRows(data);
+          setLastCheck(new Date());
           setError("");
         }
-      } catch (err) {
-        if (err.name !== "AbortError" && mounted) {
-          console.error("Gagal mengambil data:", err);
-          setError(
-            "Data gagal diperbarui. Menampilkan data terakhir jika tersedia."
-          );
+      } catch (e) {
+        if (active && e.name !== "AbortError") {
+          console.error("Sinkronisasi data bed:", e);
+          setError("Koneksi data terganggu — konfirmasi ketersediaan ke petugas.");
         }
       } finally {
-        if (
-          mounted &&
-          controller === currentController
-        ) {
-          setLoading(false);
-        }
+        if (active && controller === current) setLoading(false);
       }
     };
-
-    fetchData();
-
-    const interval = setInterval(fetchData, 100000);
-
+    load();
+    const interval = setInterval(load, REFRESH_MS);
     return () => {
-      mounted = false;
+      active = false;
       clearInterval(interval);
-
-      if (controller) {
-        controller.abort();
-      }
+      controller?.abort();
     };
   }, []);
 
-  // STATISTIK
-  // 1 BARIS SPREADSHEET = 1 BED
-  const kosong = beds.filter(
-    (b) => b.status === "kosong"
-  ).length;
+  const rooms = useMemo(() => buildRooms(rows), [rows]);
+  const total = rooms.reduce((sum, r) => sum + (r.capacity ?? 0), 0);
+  const available = rooms.reduce((sum, r) => sum + r.available, 0);
+  const occupied = rooms.reduce((sum, r) => sum + r.occupied, 0);
+  const unknown = rooms.reduce((sum, r) => sum + r.unknown, 0);
+  const reviewCount = rooms.filter((r) => r.needsReview).length;
+  const pageCount = Math.max(1, Math.ceil(rooms.length / ROOMS_PER_PAGE));
+  const currentPage = page % pageCount;
+  const currentRooms = rooms.slice(currentPage * ROOMS_PER_PAGE, (currentPage + 1) * ROOMS_PER_PAGE);
 
-  const terisi = beds.filter(
-    (b) => b.status === "terisi"
-  ).length;
-
-  const totalBed = beds.length;
-
-  // GROUPING
-  // LANTAI -> BANGSAL -> KAMAR -> BED
-  const grouped = beds.reduce((acc, bed) => {
-    const { lantai, bangsal, nomor } = bed;
-
-    if (!acc[lantai]) {
-      acc[lantai] = {};
-    }
-
-    if (!acc[lantai][bangsal]) {
-      acc[lantai][bangsal] = {};
-    }
-
-    if (!acc[lantai][bangsal][nomor]) {
-      acc[lantai][bangsal][nomor] = {
-        jumlah_bed: null,
-        beds: [],
-      };
-    }
-
-    const kamar = acc[lantai][bangsal][nomor];
-
-    // Ambil jumlah bed dari baris yang terisi
-    if (bed.jumlah_bed !== null) {
-      kamar.jumlah_bed = bed.jumlah_bed;
-    }
-
-    // Simpan semua baris sebagai bed terpisah
-    kamar.beds.push(bed);
-
-    return acc;
-  }, {});
+  useEffect(() => {
+    if (pageCount <= 1) return;
+    const interval = setInterval(() => setPage((p) => (p + 1) % pageCount), SLIDE_MS);
+    return () => clearInterval(interval);
+  }, [pageCount]);
 
   return (
-    <section className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 p-6">
-
-      {/* HEADER */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">
-          🏥 Monitoring Bed Rumah Sakit
-        </h1>
-
-        <p className="text-sm text-gray-500 mt-2">
-          Informasi Ketersediaan Tempat Tidur
-        </p>
-      </div>
-
-      {/* NOTIFIKASI ERROR */}
-      {error && (
-        <div className="mb-5 p-4 bg-yellow-50 border border-yellow-300 rounded-xl text-yellow-800 text-sm">
-          ⚠️ {error}
+    <main className="h-screen w-full overflow-hidden bg-[#f3f7fc] text-slate-900 flex flex-col p-[clamp(12px,1.6vw,30px)] gap-[clamp(10px,1.1vw,20px)]">
+      <header className="shrink-0 bg-gradient-to-r from-[#174e94] via-[#2268b8] to-[#2580bf] rounded-2xl text-white px-[clamp(18px,2.4vw,46px)] py-[clamp(12px,1.3vw,26px)] flex justify-between items-center gap-4">
+        <div className="min-w-0">
+          <p className="text-[clamp(11px,1vw,20px)] font-semibold tracking-widest text-blue-100 uppercase">RS UMS A.R. Fachrudin</p>
+          <h1 className="text-[clamp(22px,2.5vw,48px)] font-black leading-tight">Informasi Ketersediaan Kamar Rawat Inap</h1>
+          <p className="text-[clamp(12px,1vw,19px)] text-blue-100">Pantau kapasitas dan status tempat tidur pada setiap kamar</p>
         </div>
-      )}
-
-      {/* STATISTIK */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-
-        {/* BED KOSONG */}
-        <div className="bg-gradient-to-r from-green-400 to-green-600 text-white p-6 rounded-2xl shadow-lg">
-          <p className="text-sm opacity-80">
-            Bed Kosong
-          </p>
-
-          <h2 className="text-3xl font-bold mt-2">
-            {kosong}
-          </h2>
+        <div className="shrink-0 text-right hidden sm:block">
+          <p className="text-[clamp(22px,2.1vw,40px)] leading-none font-black tabular-nums">{clock.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</p>
+          <p className="text-[clamp(11px,1vw,18px)] text-blue-100 mt-2">{clock.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
         </div>
+      </header>
 
-        {/* BED TERISI */}
-        <div className="bg-gradient-to-r from-red-400 to-red-600 text-white p-6 rounded-2xl shadow-lg">
-          <p className="text-sm opacity-80">
-            Bed Terisi
-          </p>
+      <section className="shrink-0 grid grid-cols-3 gap-[clamp(8px,1vw,20px)]" aria-label="Ringkasan ketersediaan tempat tidur">
+        <Metric label="TEMPAT TIDUR TERSEDIA" value={available} unit="Status kosong" accent="text-emerald-600" />
+        <Metric label="TEMPAT TIDUR TERISI" value={occupied} unit="Sedang digunakan" accent="text-rose-600" />
+        <Metric label="TOTAL KAPASITAS" value={total} unit="Sesuai jumlah_bed" accent="text-blue-700" />
+      </section>
 
-          <h2 className="text-3xl font-bold mt-2">
-            {terisi}
-          </h2>
+      <section className="flex-1 min-h-0 flex flex-col gap-2" aria-label="Daftar kamar rawat inap">
+        <div className="shrink-0 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <h2 className="font-black text-[clamp(17px,1.55vw,28px)]">Status Setiap Kamar</h2>
+            <span className="text-[clamp(11px,0.9vw,16px)] text-slate-500">{rooms.length} kamar tercatat</span>
+          </div>
+          <div className="shrink-0 text-[clamp(11px,0.95vw,17px)] font-bold text-blue-700 bg-blue-100 px-3 py-1.5 rounded-full">
+            Halaman {currentPage + 1} / {pageCount} • berganti otomatis
+          </div>
         </div>
-
-        {/* TOTAL BED */}
-        <div className="bg-gradient-to-r from-blue-400 to-blue-600 text-white p-6 rounded-2xl shadow-lg">
-          <p className="text-sm opacity-80">
-            Total Bed
-          </p>
-
-          <h2 className="text-3xl font-bold mt-2">
-            {totalBed}
-          </h2>
-        </div>
-
-      </div>
-
-      {/* LOADING */}
-      {loading && (
-        <div className="text-center text-gray-500 py-10">
-          Memuat data tempat tidur...
-        </div>
-      )}
-
-      {/* DATA BERDASARKAN LANTAI */}
-      {!loading &&
-        Object.entries(grouped).map(
-          ([lantai, bangsalList]) => (
-            <div key={lantai} className="mb-12">
-
-              {/* NAMA LANTAI */}
-              <h2 className="text-2xl font-bold mb-5 text-gray-700">
-                🏢 {lantai}
-              </h2>
-
-              {/* DATA BANGSAL */}
-              {Object.entries(bangsalList).map(
-                ([bangsal, kamarList]) => (
-                  <div
-                    key={bangsal}
-                    className="bg-white/70 backdrop-blur-md p-5 rounded-2xl shadow-md mb-6"
-                  >
-
-                    {/* NAMA BANGSAL */}
-                    <h3 className="text-lg font-semibold mb-5 text-gray-800">
-                      🛏️ Bangsal {bangsal}
-                    </h3>
-
-                    {/* DATA KAMAR */}
-                    {Object.entries(kamarList).map(
-                      ([nomor, kamar]) => (
-                        <div
-                          key={nomor}
-                          className="mb-8"
-                        >
-
-                          {/* INFORMASI KAMAR */}
-                          <div className="mb-4">
-
-                            <h4 className="text-lg font-bold text-gray-800">
-                              Kamar {nomor}
-                            </h4>
-
-                            {/* JUMLAH BED SEKALI SAJA */}
-                            <span className="inline-block mt-2 text-sm font-semibold text-blue-700 bg-blue-100 px-4 py-2 rounded-lg">
-                              🛏️ Jumlah Bed:{" "}
-                              {kamar.jumlah_bed ??
-                                kamar.beds.length}
-                            </span>
-
-                          </div>
-
-                          {/* GRID BED */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-
-                            {kamar.beds.map(
-                              (bed, index) => (
-                                <div
-                                  key={`${nomor}-${index}`}
-                                  className={`p-4 rounded-xl shadow-md border transition-transform duration-200 hover:scale-[1.03] ${
-                                    bed.status === "kosong"
-                                      ? "bg-green-50 border-green-300"
-                                      : "bg-red-50 border-red-300"
-                                  }`}
-                                >
-
-                                  {/* NOMOR BED */}
-                                  <p className="font-bold text-lg text-gray-800 mb-3">
-                                    Bed {index + 1}
-                                  </p>
-
-                                  {/* KELAS */}
-                                  <p className="text-xs font-semibold text-gray-600 mb-2">
-                                    {bed.kelas}
-                                  </p>
-
-                                  {/* RUANGAN */}
-                                  <p className="text-xs text-gray-500 mb-3">
-                                    Ruangan:{" "}
-                                    {bed.ruangan || "-"}
-                                  </p>
-
-                                  {/* JENIS */}
-                                  <span
-                                    className={`inline-block px-2 py-1 text-xs rounded-full font-semibold mb-3 ${
-                                      bed.jenis === "laki-laki"
-                                        ? "bg-blue-100 text-blue-600"
-                                        : bed.jenis === "perempuan"
-                                        ? "bg-pink-100 text-pink-600"
-                                        : "bg-yellow-100 text-yellow-600"
-                                    }`}
-                                  >
-                                    {bed.jenis || "umum"}
-                                  </span>
-
-                                  {/* STATUS */}
-                                  <div>
-                                    <span
-                                      className={`inline-block px-3 py-1 text-xs rounded-full font-bold capitalize ${
-                                        bed.status === "kosong"
-                                          ? "bg-green-200 text-green-800"
-                                          : "bg-red-200 text-red-800"
-                                      }`}
-                                    >
-                                      {bed.status}
-                                    </span>
-                                  </div>
-
-                                </div>
-                              )
-                            )}
-
-                          </div>
-
-                        </div>
-                      )
-                    )}
-
-                  </div>
-                )
-              )}
-
-            </div>
-          )
+        {loading ? (
+          <div className="flex-1 grid place-items-center text-xl font-semibold text-slate-500">Memuat informasi kamar...</div>
+        ) : rooms.length === 0 ? (
+          <div className="flex-1 grid place-items-center text-xl font-semibold text-slate-500">Belum ada data kamar untuk ditampilkan</div>
+        ) : (
+          <div className="flex-1 min-h-0 grid grid-cols-3 grid-rows-2 gap-[clamp(8px,1vw,20px)]">
+            {currentRooms.map((room) => <RoomCard key={room.key} room={room} />)}
+          </div>
         )}
+      </section>
 
-      {/* DATA KOSONG */}
-      {!loading && beds.length === 0 && (
-        <div className="text-center text-gray-500 py-10">
-          Belum ada data bed yang dapat ditampilkan.
+      <footer className="shrink-0 flex justify-between items-center gap-4 border-t border-slate-200 pt-2 text-[clamp(11px,0.85vw,16px)] text-slate-600">
+        <div className="flex gap-4 font-semibold">
+          <span className="text-emerald-700">● Hijau: Tersedia</span>
+          <span className="text-rose-700">● Merah: Terisi</span>
+          <span className="text-amber-700">● Kuning: Belum ada data</span>
         </div>
-      )}
-
-    </section>
+        <div className="text-right">
+          {error ? <strong className="text-amber-700">{error}</strong> :
+            <span>{unknown > 0 || reviewCount > 0 ? `⚠️ ${unknown} bed tanpa status • ${reviewCount} kamar perlu dicek · ` : ""}Diperiksa: {lastCheck ? lastCheck.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "—"}</span>}
+          <span className="ml-2">• Konfirmasi ketersediaan kepada petugas</span>
+        </div>
+      </footer>
+    </main>
   );
 }
