@@ -133,9 +133,24 @@ export default function Home() {
       {Object.keys(grouped).map((lantai) => (
         <div key={lantai} className="mb-12">
 
-          <h2 className="text-2xl font-bold mb-4 text-gray-700">
-            🏢 {lantai}
-          </h2>
+          <div className="mb-5">
+  <h2 className="text-2xl font-bold text-gray-700">
+    🏢 {lantai}
+  </h2>
+
+  <div className="flex items-center gap-2 mt-2">
+    <span className="text-sm font-semibold text-blue-700 bg-blue-100 px-4 py-2 rounded-lg">
+      🛏️ Jumlah Bed:{" "}
+      {Object.values(grouped[lantai])
+        .flatMap((bangsal) => Object.values(bangsal))
+        .flat()
+        .reduce(
+          (total, bed) => total + bed.jumlah_bed,
+          0
+        )}
+    </span>
+  </div>
+</div>
 
           {Object.keys(grouped[lantai]).map((bangsal) => (
             <div
@@ -184,14 +199,14 @@ export default function Home() {
                             </p>
 
                             {/* JUMLAH BED */}
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-3">
+                            {/* <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-3">
                               <p className="text-xs text-blue-500">
                                 Jumlah Bed
                               </p>
                               <p className="text-xl font-bold text-blue-700">
                                 {bed.jumlah_bed}
                               </p>
-                            </div>
+                            </div> */}
 
                             {/* JENIS */}
                             <span
