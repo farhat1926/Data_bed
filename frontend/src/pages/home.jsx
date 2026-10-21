@@ -8,11 +8,28 @@ const REFRESH_MS = 30000;
 const SLIDE_MS = 9000;
 const ROOMS_PER_PAGE = 6;
 
+// Normalisasi teks agar Ar Rahim dan Ar-Rahim dianggap bangsal yang sama.
+function normalKey(value) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+// Kolom lantai pada spreadsheet berisi kode bed, misalnya Lantai 3D1.
+// Ambil lantai bangunannya saja: Lantai 3.
+function floorLabel(value) {
+  const raw = String(value ?? "").trim();
+  const match = raw.match(/lantai\s*(\d+)/i);
+  return match ? `Lantai ${match[1]}` : raw || "Lokasi belum tercatat";
+}
+
 function normalizeRow(row) {
   const raw = String(row.jumlah_bed ?? "").trim();
   const num = raw === "" ? null : Number(raw);
   const status = String(row.status ?? "").trim().toLowerCase();
   return {
+    id: String(row.id ?? "").trim(),
     nomor: String(row.nomor ?? "").trim(),
     lantai: String(row.lantai ?? "").trim(),
     bangsal: String(row.bangsal ?? "").trim(),
@@ -20,24 +37,20 @@ function normalizeRow(row) {
     ruangan: String(row.ruangan ?? "").trim(),
     jenis: String(row.jenis ?? "").trim().toLowerCase(),
     status: status === "kosong" || status === "terisi" ? status : "unknown",
-    capacity: Number.isInteger(num) && num >= 0 ? num : null,
+    capacity: Number.isInteger(num) && num > 0 ? num : null,
   };
 }
 
 function buildRooms(rows) {
   const map = new Map();
   rows.forEach((r) => {
-    if (!r.nomor || !r.lantai || !r.bangsal) return;
-    const key = JSON.stringify([r.lantai, r.bangsal, r.nomor]);
+    if (!r.nomor || !r.bangsal) return;
+    const lantai = floorLabel(r.lantai);
+    const key = JSON.stringify([normalKey(lantai), normalKey(r.bangsal), normalKey(r.nomor)]);
     if (!map.has(key)) {
       map.set(key, {
-        key,
-        nomor: r.nomor,
-        lantai: r.lantai,
-        bangsal: r.bangsal,
-        kelas: r.kelas,
-        capacity: null,
-        rows: [],
+        key, nomor: r.nomor, lantai, bangsal: r.bangsal,
+        kelas: r.kelas, capacity: null, rows: [],
       });
     }
     const room = map.get(key);
@@ -45,19 +58,26 @@ function buildRooms(rows) {
     if (!room.kelas && r.kelas) room.kelas = r.kelas;
     room.rows.push(r);
   });
+
   return Array.from(map.values()).map((room) => {
-    const capacity = room.capacity ?? 0;
-    const beds = Array.from({ length: capacity }, (_, i) => ({
+    // Baris status tetap mengikuti urutan spreadsheet; satu baris = satu bed.
+    // Kapasitas diambil hanya dari kolom jumlah_bed, sekali per kamar.
+    const capacity = room.capacity;
+    const beds = Array.from({ length: capacity ?? 0 }, (_, i) => ({
       number: i + 1,
+      id: room.rows[i]?.id || null,
       status: room.rows[i]?.status ?? "unknown",
     }));
+    const available = beds.filter((b) => b.status === "kosong").length;
+    const occupied = beds.filter((b) => b.status === "terisi").length;
+    const unknown = beds.filter((b) => b.status === "unknown").length;
+    const needsReview = capacity === null || room.rows.length !== capacity || unknown > 0;
     return {
-      ...room,
-      beds,
-      available: beds.filter((b) => b.status === "kosong").length,
-      occupied: beds.filter((b) => b.status === "terisi").length,
-      unknown: beds.filter((b) => b.status === "unknown").length,
-      needsReview: room.capacity === null || room.rows.length > capacity,
+      ...room, beds, available, occupied, unknown, needsReview,
+      // Jangan pernah menganggap kapasitas 0 atau tidak diketahui sebagai PENUH.
+      displayStatus: available > 0 ? `${available} TERSEDIA` :
+        needsReview ? "PERLU VERIFIKASI" :
+        occupied === capacity && capacity > 0 ? "PENUH" : "PERLU VERIFIKASI",
     };
   });
 }
@@ -78,9 +98,10 @@ function Metric({ label, value, accent, unit }) {
 
 function RoomCard({ room }) {
   const isAvailable = room.available > 0;
+  const needsReview = room.needsReview;
   return (
     <article className={`h-full min-h-0 overflow-hidden rounded-2xl border-2 bg-white shadow-sm flex flex-col ${
-      isAvailable ? "border-emerald-300" : room.unknown ? "border-amber-300" : "border-slate-200"
+      isAvailable ? "border-emerald-300" : needsReview ? "border-amber-300" : "border-rose-300"
     }`}>
       <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
         <div className="min-w-0">
@@ -92,9 +113,9 @@ function RoomCard({ room }) {
           </h3>
         </div>
         <span className={`shrink-0 rounded-xl px-3 py-2 text-center font-extrabold text-[clamp(11px,1.05vw,18px)] ${
-          isAvailable ? "bg-emerald-100 text-emerald-800" : room.unknown ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800"
+          isAvailable ? "bg-emerald-100 text-emerald-800" : needsReview ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800"
         }`}>
-          {isAvailable ? `${room.available} TERSEDIA` : room.unknown ? "CEK STATUS" : "PENUH"}
+          {room.displayStatus}
         </span>
       </div>
       <div className="flex-1 min-h-0 flex flex-col justify-center px-4 py-3 gap-3">
