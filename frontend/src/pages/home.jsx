@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import Papa from "papaparse";
 
 const SPREADSHEET_URL =
-  "https://script.google.com/macros/s/AKfycbwwW9uCPjA6--pTEaCl2m5u3lxf5ZwWrJWOmPXZbq1wKpvapUxVaGkF4mKC01QzxzAt/exec";
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmz55GXbaiZ040aPDaLDLpApzFYtjYQ2431Qk9_bRD0bAl50f1zrVrBglOHr6VRj4Vo2SLvnIKBA2B/pub?output=csv";
 
 export default function Home() {
   const [beds, setBeds] = useState([]);
