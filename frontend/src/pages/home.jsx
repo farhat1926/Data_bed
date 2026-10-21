@@ -109,7 +109,7 @@ export default function Home() {
 
     fetchData();
 
-    const interval = setInterval(fetchData, 5000);
+    const interval = setInterval(fetchData, 100000);
 
     return () => {
       mounted = false;
