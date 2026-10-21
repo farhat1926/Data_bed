@@ -1,60 +1,138 @@
+
 import React, { useEffect, useState } from "react";
 import Papa from "papaparse";
 
+const SPREADSHEET_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmz55GXbaiZ040aPDaLDLpApzFYtjYQ2431Qk9_bRD0bAl50f1zrVrBglOHr6VRj4Vo2SLvnIKBA2B/pub?output=csv";
+
 export default function Home() {
   const [beds, setBeds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    let mounted = true;
+    let controller = null;
+
     const fetchData = async () => {
-      const url = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSmz55GXbaiZ040aPDaLDLpApzFYtjYQ2431Qk9_bRD0bAl50f1zrVrBglOHr6VRj4Vo2SLvnIKBA2B/pub?output=csv${Date.now()}`;
+      // Hindari request yang menumpuk
+      if (controller) controller.abort();
+      controller = new AbortController();
 
-      const res = await fetch(url);
-      const text = await res.text();
+      try {
+        const url = `${SPREADSHEET_URL}&t=${Date.now()}`;
 
-      const result = Papa.parse(text, {
-        header: true,
-        skipEmptyLines: true,
-      });
+        const res = await fetch(url, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
 
-      const cleanData = result.data
-  .map((b) => ({
-    nomor: (b.nomor || b.Nomor || b["nomor "] || "").trim(),
-    kelas: (b.kelas || b.Kelas || "").trim(),
-    ruangan: (b.ruangan || "").trim(),
-    status: (b.status || "").toLowerCase().trim(),
-    lantai: (b.lantai || "").trim(),
-    bangsal: (b.bangsal || b["bangsal "] || "").trim(),
-    jenis: (b.jenis || "").toLowerCase().trim(),
-  }))
-  .filter(
-    (b) =>
-      b.nomor !== "" &&
-      b.status !== "" &&
-      b.lantai !== "" &&
-      b.bangsal !== ""
-  );
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
 
-      setBeds(cleanData);
+        const text = await res.text();
+
+        const result = Papa.parse(text, {
+          header: true,
+          skipEmptyLines: true,
+          transformHeader: (header) =>
+            header.trim().toLowerCase(),
+        });
+
+        if (result.errors.length > 0) {
+          console.warn("Peringatan CSV:", result.errors);
+        }
+
+        const cleanData = result.data
+          .map((b) => {
+            const jumlahRaw = String(
+              b.jumlah_bed ?? "1"
+            ).trim();
+
+            return {
+              nomor: String(b.nomor ?? "").trim(),
+              kelas: String(b.kelas ?? "").trim(),
+              ruangan: String(b.ruangan ?? "").trim(),
+              status: String(b.status ?? "")
+                .toLowerCase()
+                .trim(),
+              lantai: String(b.lantai ?? "").trim(),
+              bangsal: String(b.bangsal ?? "").trim(),
+              jenis: String(b.jenis ?? "")
+                .toLowerCase()
+                .trim(),
+              jumlah_bed:
+                jumlahRaw === ""
+                  ? NaN
+                  : Number(jumlahRaw),
+            };
+          })
+          .filter(
+            (b) =>
+              b.nomor !== "" &&
+              ["kosong", "terisi"].includes(b.status) &&
+              b.lantai !== "" &&
+              b.bangsal !== "" &&
+              Number.isInteger(b.jumlah_bed) &&
+              b.jumlah_bed >= 0
+          );
+
+        if (mounted) {
+          setBeds(cleanData);
+          setError("");
+        }
+      } catch (err) {
+        if (err.name !== "AbortError" && mounted) {
+          console.error("Gagal mengambil data:", err);
+          setError(
+            "Data gagal diperbarui. Menampilkan data terakhir yang tersedia."
+          );
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
     };
 
     fetchData();
+
     const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      if (controller) controller.abort();
+    };
   }, []);
 
-  // 🔥 STATISTIK
-  const kosong = beds.filter((b) => b.status === "kosong").length;
-  const terisi = beds.filter((b) => b.status === "terisi").length;
+  // STATISTIK BERDASARKAN JUMLAH BED
+  const kosong = beds
+    .filter((b) => b.status === "kosong")
+    .reduce((total, b) => total + b.jumlah_bed, 0);
 
-  // 🔥 GROUPING
+  const terisi = beds
+    .filter((b) => b.status === "terisi")
+    .reduce((total, b) => total + b.jumlah_bed, 0);
+
+  const totalBed = kosong + terisi;
+
+  // GROUPING BERDASARKAN LANTAI, BANGSAL, JENIS
   const grouped = beds.reduce((acc, bed) => {
-    if (!acc[bed.lantai]) acc[bed.lantai] = {};
-    if (!acc[bed.lantai][bed.bangsal]) acc[bed.lantai][bed.bangsal] = {};
-    if (!acc[bed.lantai][bed.bangsal][bed.jenis]) {
-      acc[bed.lantai][bed.bangsal][bed.jenis] = [];
+    if (!acc[bed.lantai]) {
+      acc[bed.lantai] = {};
     }
 
-    acc[bed.lantai][bed.bangsal][bed.jenis].push(bed);
+    if (!acc[bed.lantai][bed.bangsal]) {
+      acc[bed.lantai][bed.bangsal] = {};
+    }
+
+    const jenis = bed.jenis || "umum";
+
+    if (!acc[bed.lantai][bed.bangsal][jenis]) {
+      acc[bed.lantai][bed.bangsal][jenis] = [];
+    }
+
+    acc[bed.lantai][bed.bangsal][jenis].push(bed);
 
     return acc;
   }, {});
@@ -62,107 +140,200 @@ export default function Home() {
   return (
     <section className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 p-6">
 
-  {/* HEADER */}
-  <div className="mb-8">
-    <h1 className="text-3xl font-bold text-gray-800">
-      🏥 Monitoring Bed Rumah Sakit
-    </h1>
-  </div>
+      {/* HEADER */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-800">
+          🏥 Monitoring Bed Rumah Sakit
+        </h1>
+        <p className="text-sm text-gray-500 mt-2">
+          Informasi ketersediaan tempat tidur
+        </p>
+      </div>
 
-  {/* STATISTIK */}
-  <div className="grid md:grid-cols-3 gap-6 mb-10">
-    <div className="bg-gradient-to-r from-green-400 to-green-600 text-white p-6 rounded-2xl shadow-lg">
-      <p className="text-sm opacity-80">Bed Kosong</p>
-      <h2 className="text-3xl font-bold">{kosong}</h2>
-    </div>
-
-    <div className="bg-gradient-to-r from-red-400 to-red-600 text-white p-6 rounded-2xl shadow-lg">
-      <p className="text-sm opacity-80">Bed Terisi</p>
-      <h2 className="text-3xl font-bold">{terisi}</h2>
-    </div>
-
-    <div className="bg-gradient-to-r from-blue-400 to-blue-600 text-white p-6 rounded-2xl shadow-lg">
-      <p className="text-sm opacity-80">Total Bed</p>
-      <h2 className="text-3xl font-bold">{beds.length}</h2>
-    </div>
-  </div>
-
-  {/* DATA */}
-  {Object.keys(grouped).map((lantai) => (
-    <div key={lantai} className="mb-12">
-      <h2 className="text-2xl font-bold mb-4 text-gray-700">
-        🏢 {lantai}
-      </h2>
-
-      {Object.keys(grouped[lantai]).map((bangsal) => (
-        <div
-          key={bangsal}
-          className="bg-white/70 backdrop-blur-md p-5 rounded-2xl shadow-md mb-6"
-        >
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">
-            🛏️ Bangsal {bangsal}
-          </h3>
-
-          {Object.keys(grouped[lantai][bangsal]).map((jenis) => (
-            <div key={jenis} className="mb-6">
-              <p className="mb-3 text-sm font-semibold text-gray-600 capitalize">
-                {jenis}
-              </p>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {grouped[lantai][bangsal][jenis].map((bed, i) => (
-                  <div
-                    key={i}
-                    className={`p-4 rounded-xl shadow-md border transition hover:scale-105 ${
-                      bed.status === "kosong"
-                        ? "bg-green-50 border-green-300"
-                        : "bg-red-50 border-red-300"
-                    }`}
-                  >
-                    {/* NOMOR */}
-                    <p className="font-bold text-lg text-gray-800">
-                      {bed.nomor}
-                    </p>
-
-                    {/* KELAS */}
-                    <p className="text-xs text-gray-500 mb-2">
-                      {bed.kelas}
-                    </p>
-
-                    {/* JENIS */}
-                    <span
-                      className={`inline-block px-2 py-1 text-xs rounded-full font-semibold mb-2 ${
-                        bed.jenis === "laki-laki"
-                          ? "bg-blue-100 text-blue-600"
-                          : bed.jenis === "perempuan"
-                          ? "bg-pink-100 text-pink-600"
-                          : "bg-yellow-100 text-yellow-600"
-                      }`}
-                    >
-                      {bed.jenis || "umum"}
-                    </span>
-
-                    {/* STATUS */}
-                    <div>
-                      <span
-                        className={`px-2 py-1 text-xs rounded-full font-bold ${
-                          bed.status === "kosong"
-                            ? "bg-green-200 text-green-800"
-                            : "bg-red-200 text-red-800"
-                        }`}
-                      >
-                        {bed.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+      {/* NOTIFIKASI ERROR */}
+      {error && (
+        <div className="mb-5 p-4 bg-yellow-50 border border-yellow-300 rounded-xl text-yellow-800 text-sm">
+          ⚠️ {error}
         </div>
-      ))}
-    </div>
-  ))}
-</section>
+      )}
+
+      {/* STATISTIK */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+
+        <div className="bg-gradient-to-r from-green-400 to-green-600 text-white p-6 rounded-2xl shadow-lg">
+          <p className="text-sm opacity-80">
+            Bed Kosong
+          </p>
+          <h2 className="text-3xl font-bold mt-2">
+            {kosong}
+          </h2>
+        </div>
+
+        <div className="bg-gradient-to-r from-red-400 to-red-600 text-white p-6 rounded-2xl shadow-lg">
+          <p className="text-sm opacity-80">
+            Bed Terisi
+          </p>
+          <h2 className="text-3xl font-bold mt-2">
+            {terisi}
+          </h2>
+        </div>
+
+        <div className="bg-gradient-to-r from-blue-400 to-blue-600 text-white p-6 rounded-2xl shadow-lg">
+          <p className="text-sm opacity-80">
+            Total Bed
+          </p>
+          <h2 className="text-3xl font-bold mt-2">
+            {totalBed}
+          </h2>
+        </div>
+
+      </div>
+
+      {/* LOADING */}
+      {loading && (
+        <div className="text-center text-gray-500 py-10">
+          Memuat data tempat tidur...
+        </div>
+      )}
+
+      {/* DATA BERDASARKAN LANTAI */}
+      {!loading &&
+        Object.keys(grouped).map((lantai) => (
+          <div key={lantai} className="mb-12">
+
+            {/* JUDUL LANTAI */}
+            <h2 className="text-2xl font-bold mb-5 text-gray-700">
+              🏢 {lantai}
+            </h2>
+
+            {/* BANGSAL */}
+            {Object.keys(grouped[lantai]).map((bangsal) => (
+              <div
+                key={bangsal}
+                className="bg-white/70 backdrop-blur-md p-5 rounded-2xl shadow-md mb-6"
+              >
+
+                
+{/* NAMA BANGSAL DAN JUMLAH BED */}
+<div className="mb-5">
+  <h3 className="text-lg font-semibold text-gray-800">
+    🛏️ Bangsal {bangsal}
+  </h3>
+
+  <div className="mt-2">
+    <span className="inline-block text-sm font-semibold text-blue-700 bg-blue-100 px-4 py-2 rounded-lg">
+      🛏️ Jumlah Bed:{" "}
+      {Object.values(grouped[lantai][bangsal])
+        .flat()
+        .reduce(
+          (total, bed) => total + bed.jumlah_bed,
+          0
+        )}
+    </span>
+  </div>
+</div>
+
+
+                {/* JENIS */}
+                {Object.keys(grouped[lantai][bangsal]).map(
+                  (jenis) => (
+                    <div key={jenis} className="mb-6">
+
+                      <p className="mb-4 text-sm font-semibold text-gray-600 capitalize">
+                        {jenis}
+                      </p>
+
+                      {/* GRID NOMOR KAMAR */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
+
+                        {grouped[lantai][bangsal][jenis].map(
+                          (bed, i) => (
+                            <div
+                              key={`${bed.nomor}-${i}`}
+                              className="flex flex-col gap-2"
+                            >
+
+                              {/* NOMOR DAN JUMLAH BED */}
+                              {/* DITAMPILKAN DI LUAR KOTAK */}
+                              <div className="px-1">
+
+                                <p className="font-bold text-lg text-gray-800">
+                                  Nomor {bed.nomor}
+                                </p>
+
+                                <p className="text-sm font-semibold text-blue-600 mt-1">
+                                  🛏️ Jumlah Bed: {bed.jumlah_bed}
+                                </p>
+
+                              </div>
+
+                              {/* KOTAK INFORMASI BED */}
+                              <div
+                                className={`p-4 rounded-xl shadow-md border transition-transform duration-200 hover:scale-[1.03] ${
+                                  bed.status === "kosong"
+                                    ? "bg-green-50 border-green-300"
+                                    : "bg-red-50 border-red-300"
+                                }`}
+                              >
+
+                                {/* KELAS */}
+                                <p className="text-xs font-semibold text-gray-600 mb-2">
+                                  {bed.kelas}
+                                </p>
+
+                                {/* RUANGAN */}
+                                <p className="text-xs text-gray-500 mb-3">
+                                  Ruangan: {bed.ruangan || "-"}
+                                </p>
+
+                                {/* JENIS */}
+                                <span
+                                  className={`inline-block px-2 py-1 text-xs rounded-full font-semibold mb-3 ${
+                                    bed.jenis === "laki-laki"
+                                      ? "bg-blue-100 text-blue-600"
+                                      : bed.jenis === "perempuan"
+                                      ? "bg-pink-100 text-pink-600"
+                                      : "bg-yellow-100 text-yellow-600"
+                                  }`}
+                                >
+                                  {bed.jenis || "umum"}
+                                </span>
+
+                                {/* STATUS */}
+                                <div>
+                                  <span
+                                    className={`inline-block px-3 py-1 text-xs rounded-full font-bold capitalize ${
+                                      bed.status === "kosong"
+                                        ? "bg-green-200 text-green-800"
+                                        : "bg-red-200 text-red-800"
+                                    }`}
+                                  >
+                                    {bed.status}
+                                  </span>
+                                </div>
+
+                              </div>
+                            </div>
+                          )
+                        )}
+
+                      </div>
+                    </div>
+                  )
+                )}
+
+              </div>
+            ))}
+          </div>
+        ))}
+
+      {/* DATA KOSONG */}
+      {!loading && beds.length === 0 && (
+        <div className="text-center text-gray-500 py-10">
+          Belum ada data bed yang dapat ditampilkan.
+        </div>
+      )}
+
+    </section>
   );
 }
