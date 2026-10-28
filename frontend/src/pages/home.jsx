@@ -175,7 +175,15 @@ export default function Home() {
           transformHeader: (h) => h.replace(/^\uFEFF/, "").trim().toLowerCase(),
         });
         if (!Array.isArray(parsed.data)) throw new Error("Format CSV tidak sesuai");
-        const data = parsed.data.map(normalizeRow).filter((r) => r.nomor && r.lantai && r.bangsal);
+        const data = parsed.data
+  .map(normalizeRow)
+  .filter((r) => r.nomor && r.lantai && r.bangsal);
+
+console.log("Jumlah baris CSV:", parsed.data.length);
+console.log("Jumlah baris valid:", data.length);
+console.log("Baris yang tidak terbaca:",
+  parsed.data.filter((r) => !r.nomor || !r.lantai || !r.bangsal)
+);
         if (active && controller === current) {
           setRows(data);
           setLastCheck(new Date());
@@ -199,7 +207,17 @@ export default function Home() {
     };
   }, []);
 
-  const rooms = useMemo(() => buildRooms(rows), [rows]);
+  console.table(
+  rooms.map((room) => ({
+    kamar: room.nomor,
+    bangsal: room.bangsal,
+    kapasitas: room.capacity,
+    jumlahBaris: room.rows.length,
+    tersedia: room.available,
+    terisi: room.occupied,
+    perluVerifikasi: room.needsReview
+  }))
+);
   const total = rooms.reduce((sum, r) => sum + (r.capacity ?? 0), 0);
   const available = rooms.reduce((sum, r) => sum + r.available, 0);
   const occupied = rooms.reduce((sum, r) => sum + r.occupied, 0);
