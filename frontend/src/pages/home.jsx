@@ -268,9 +268,14 @@ console.log("Baris yang tidak terbaca:",
         ) : rooms.length === 0 ? (
           <div className="flex-1 grid place-items-center text-xl font-semibold text-slate-500">Belum ada data kamar untuk ditampilkan</div>
         ) : (
-          <div className="flex-1 min-h-0 grid grid-cols-3 grid-rows-2 gap-[clamp(8px,1vw,20px)]">
-            {currentRooms.map((room) => <RoomCard key={room.key} room={room} />)}
-          </div>
+              <div
+                key={currentPage}
+                className="page-enter flex-1 min-h-0 grid grid-cols-3 grid-rows-2 gap-[clamp(8px,1vw,20px)]"
+              >
+                {currentRooms.map((room) => (
+                  <RoomCard key={room.key} room={room} />
+                ))}
+              </div>
         )}
       </section>
 

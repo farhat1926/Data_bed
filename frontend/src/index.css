@@ -1,3 +1,54 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
+/* Animasi perpindahan halaman kamar */
+@keyframes room-page-enter {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.page-enter {
+  animation: room-page-enter 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Kartu muncul sedikit bergantian */
+.page-enter > article {
+  animation: room-page-enter 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.page-enter > article:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.page-enter > article:nth-child(3) {
+  animation-delay: 120ms;
+}
+
+.page-enter > article:nth-child(4) {
+  animation-delay: 180ms;
+}
+
+.page-enter > article:nth-child(5) {
+  animation-delay: 240ms;
+}
+
+.page-enter > article:nth-child(6) {
+  animation-delay: 300ms;
+}
+
+/* Hormati pengaturan pengguna yang mengurangi animasi */
+@media (prefers-reduced-motion: reduce) {
+  .page-enter,
+  .page-enter > article {
+    animation: none;
+  }
+}
