@@ -3,11 +3,28 @@
 @tailwind utilities;
 
 
-/* Animasi perpindahan halaman kamar */
-@keyframes room-page-enter {
+
+/* Transisi halaman kamar */
+.room-page {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  will-change: transform, opacity;
+}
+
+.room-page-enter {
+  animation: room-enter 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.room-page-exit {
+  animation: room-exit 350ms ease-in both;
+  pointer-events: none;
+}
+
+@keyframes room-enter {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateX(35px);
   }
 
   to {
@@ -16,39 +33,22 @@
   }
 }
 
-.page-enter {
-  animation: room-page-enter 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+@keyframes room-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-25px);
+  }
 }
 
-/* Kartu muncul sedikit bergantian */
-.page-enter > article {
-  animation: room-page-enter 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.page-enter > article:nth-child(2) {
-  animation-delay: 60ms;
-}
-
-.page-enter > article:nth-child(3) {
-  animation-delay: 120ms;
-}
-
-.page-enter > article:nth-child(4) {
-  animation-delay: 180ms;
-}
-
-.page-enter > article:nth-child(5) {
-  animation-delay: 240ms;
-}
-
-.page-enter > article:nth-child(6) {
-  animation-delay: 300ms;
-}
-
-/* Hormati pengaturan pengguna yang mengurangi animasi */
 @media (prefers-reduced-motion: reduce) {
-  .page-enter,
-  .page-enter > article {
+  .room-page-enter,
+  .room-page-exit {
     animation: none;
   }
 }
+

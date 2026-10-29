@@ -149,11 +149,29 @@ export default function Home() {
   const [lastCheck, setLastCheck] = useState(null);
   const [page, setPage] = useState(0);
   const [clock, setClock] = useState(new Date());
+  const [displayPage, setDisplayPage] = useState(0);
+const [transitioning, setTransitioning] = useState(false);
 
   useEffect(() => {
-    const timer = setInterval(() => setClock(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  if (pageCount <= 1) {
+    setDisplayPage(0);
+    setPage(0);
+    setTransitioning(false);
+    return;
+  }
+
+  const interval = setInterval(() => {
+    setTransitioning(true);
+
+    setTimeout(() => {
+      setPage((p) => (p + 1) % pageCount);
+      setDisplayPage((p) => (p + 1) % pageCount);
+      setTransitioning(false);
+    }, 350);
+  }, SLIDE_MS);
+
+  return () => clearInterval(interval);
+}, [pageCount]);
 
   useEffect(() => {
     let active = true;
@@ -224,8 +242,12 @@ console.log("Baris yang tidak terbaca:",
   const unknown = rooms.reduce((sum, r) => sum + r.unknown, 0);
   const reviewCount = rooms.filter((r) => r.needsReview).length;
   const pageCount = Math.max(1, Math.ceil(rooms.length / ROOMS_PER_PAGE));
-  const currentPage = page % pageCount;
-  const currentRooms = rooms.slice(currentPage * ROOMS_PER_PAGE, (currentPage + 1) * ROOMS_PER_PAGE);
+  const currentPage = displayPage % pageCount;
+
+const currentRooms = rooms.slice(
+  currentPage * ROOMS_PER_PAGE,
+  (currentPage + 1) * ROOMS_PER_PAGE
+);
 
   useEffect(() => {
     if (pageCount <= 1) return;
