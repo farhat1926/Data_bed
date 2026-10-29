@@ -272,7 +272,7 @@ const currentRooms = rooms.slice(
       <section className="shrink-0 grid grid-cols-3 gap-[clamp(8px,1vw,20px)]" aria-label="Ringkasan ketersediaan tempat tidur">
         <Metric label="TEMPAT TIDUR TERSEDIA" value={available} unit="Status kosong" accent="text-emerald-600" />
         <Metric label="TEMPAT TIDUR TERISI" value={occupied} unit="Sedang digunakan" accent="text-rose-600" />
-        <Metric label="TOTAL KAPASITAS" value={total} unit="Sesuai jumlah_bed" accent="text-blue-700" />
+        <Metric label="TOTAL KAPASITAS" value={total} unit="Sesuai jumlah bed" accent="text-blue-700" />
       </section>
 
       <section className="flex-1 min-h-0 flex flex-col gap-2" aria-label="Daftar kamar rawat inap">
@@ -282,7 +282,7 @@ const currentRooms = rooms.slice(
             <span className="text-[clamp(11px,0.9vw,16px)] text-slate-500">{rooms.length} kamar tercatat</span>
           </div>
           <div className="shrink-0 text-[clamp(11px,0.95vw,17px)] font-bold text-blue-700 bg-blue-100 px-3 py-1.5 rounded-full">
-            Halaman {currentPage + 1} / {pageCount} • berganti otomatis
+            Halaman {currentPage + 1} / {pageCount}
           </div>
         </div>
         {loading ? (
